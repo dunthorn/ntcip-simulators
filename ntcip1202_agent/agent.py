@@ -5,15 +5,16 @@ Implements the Actuated Signal Controller (ASC) MIB.
 
 Derived from NTCIP 1202 v04. Copyright by AASHTO / ITE / NEMA. Used by permission.
 
-Usage:
-    python3 agent.py [options]
+Usage (from the simulation/ directory):
+    python3 -m ntcip1202_agent.agent [options]
 
 Options:
     --host HOST              Bind address (default: 0.0.0.0)
-    --port PORT              UDP port    (default: 1161; use 161 with sudo)
+    --port PORT              UDP/TCP port (default: 1161; use 161 with sudo)
     --community STR          Read-only community  (default: public)
     --write-community STR    Read-write community (default: private)
     --phases N               Number of phases 2..255 (default: 8)
+    --transport STR          Transport: udp, tcp, or both (default: udp)
     --verbose                Debug logging
 
 Requires only the Python standard library.  No third-party packages needed.
@@ -25,9 +26,9 @@ import signal
 import time
 import threading
 
-from mib_data import ASCDataStore
-from oid_tree import NativeOIDTree
-from snmp_server import SNMPServer
+from ntcip1202_agent.mib_data import ASCDataStore
+from ntcip1202_agent.oid_tree import NativeOIDTree
+from common.snmp_server import SNMPServer
 
 logging.basicConfig(
     level=logging.INFO,

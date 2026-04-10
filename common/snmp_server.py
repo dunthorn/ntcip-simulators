@@ -488,18 +488,30 @@ class UDPSNMPServer:
 
 class TCPSNMPServer:
     """
-    SNMP over TCP (RFC 3430).
+    SNMP over TCP with automatic framing detection.
 
-    Framing: each message is preceded by a 4-byte big-endian length field.
-    Each connected client gets its own thread.  The server accepts connections
-    on a single listener thread and spawns a handler thread per client.
+    Two framing modes are supported transparently:
 
-    Clients may keep the connection open and send multiple messages sequentially;
-    each is handled independently.
+    RFC 3430 (framed):
+        Each SNMP message is preceded by a 4-byte big-endian length field.
+        Detected when the first byte of a new message is NOT 0x30 (SEQUENCE).
+
+    Raw BER (unframed):
+        The SNMP SEQUENCE tag (0x30) is sent directly without any length
+        prefix.  Many older NTCIP management systems use this mode.
+        Detected when the first byte of a new message IS 0x30.
+
+    The framing mode is detected from the first byte of the first message
+    on each connection and then held fixed for the lifetime of that
+    connection.  Responses are sent in the same framing as the request.
+
+    Each connected client gets its own thread.
     """
 
-    # Maximum message size we'll accept (64 KiB is generous for SNMP)
     MAX_MSG_SIZE = 65535
+
+    # Tag that marks the start of a raw BER SNMP message
+    _BER_SEQUENCE_TAG = 0x30
 
     def __init__(self, dispatcher, host='0.0.0.0', port=161):
         self._dispatcher = dispatcher
@@ -540,22 +552,22 @@ class TCPSNMPServer:
         log.debug(f"TCP client connected: {addr}")
         try:
             conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            while self._running:
-                # Read 4-byte length prefix
-                hdr = self._recv_exact(conn, 4)
-                if not hdr:
-                    break
-                msg_len = struct.unpack('>I', hdr)[0]
-                if msg_len == 0 or msg_len > self.MAX_MSG_SIZE:
-                    log.warning(f"TCP {addr}: invalid message length {msg_len}, closing")
-                    break
-                data = self._recv_exact(conn, msg_len)
-                if not data:
-                    break
-                resp = self._dispatcher.handle(data, addr)
-                if resp:
-                    # Send with 4-byte length prefix
-                    conn.sendall(struct.pack('>I', len(resp)) + resp)
+
+            # Peek at the first byte to determine framing
+            first = self._recv_exact(conn, 1)
+            if not first:
+                return
+
+            if first[0] == self._BER_SEQUENCE_TAG:
+                # Raw BER framing (no length prefix)
+                log.debug(f"TCP {addr}: raw BER framing detected")
+                self._loop_raw(conn, addr, first)
+            else:
+                # RFC 3430 framing (4-byte length prefix)
+                # The byte we already read is the MSB of the length field
+                log.debug(f"TCP {addr}: RFC 3430 framing detected")
+                self._loop_framed(conn, addr, first)
+
         except OSError as e:
             log.debug(f"TCP {addr} closed: {e}")
         except Exception as e:
@@ -566,6 +578,83 @@ class TCPSNMPServer:
             except OSError:
                 pass
             log.debug(f"TCP client disconnected: {addr}")
+
+    def _loop_framed(self, conn, addr, first_byte):
+        """
+        RFC 3430: 4-byte big-endian length prefix before each message.
+        first_byte is the one byte already read (MSB of the length field).
+        """
+        rest_of_hdr = self._recv_exact(conn, 3)
+        if not rest_of_hdr:
+            return
+        hdr = first_byte + rest_of_hdr
+
+        while self._running:
+            msg_len = struct.unpack('>I', hdr)[0]
+            if msg_len == 0 or msg_len > self.MAX_MSG_SIZE:
+                log.warning(f"TCP {addr}: RFC3430 length {msg_len} out of range, closing")
+                return
+            data = self._recv_exact(conn, msg_len)
+            if not data:
+                return
+            resp = self._dispatcher.handle(data, addr)
+            if resp:
+                conn.sendall(struct.pack('>I', len(resp)) + resp)
+            # Read next 4-byte header
+            hdr = self._recv_exact(conn, 4)
+            if not hdr:
+                return
+
+    def _loop_raw(self, conn, addr, first_byte):
+        """
+        Raw BER: no framing — parse message length from the BER envelope.
+        first_byte is the SEQUENCE tag (0x30) already read.
+        """
+        while self._running:
+            # We have the tag; read the length
+            msg_data = bytearray(first_byte)
+
+            # Read first length byte
+            lb = self._recv_exact(conn, 1)
+            if not lb:
+                return
+            msg_data += lb
+
+            first_len_byte = lb[0]
+            if first_len_byte < 0x80:
+                # Short form: length is this byte directly
+                content_len = first_len_byte
+            else:
+                # Long form: next (first_len_byte & 0x7F) bytes are the length
+                num_len_bytes = first_len_byte & 0x7F
+                if num_len_bytes == 0 or num_len_bytes > 3:
+                    log.warning(f"TCP {addr}: unsupported BER length form, closing")
+                    return
+                len_bytes = self._recv_exact(conn, num_len_bytes)
+                if not len_bytes:
+                    return
+                msg_data += len_bytes
+                content_len = int.from_bytes(len_bytes, 'big')
+
+            if content_len > self.MAX_MSG_SIZE:
+                log.warning(f"TCP {addr}: BER content length {content_len} too large, closing")
+                return
+
+            # Read the content
+            content = self._recv_exact(conn, content_len)
+            if not content:
+                return
+            msg_data += content
+
+            resp = self._dispatcher.handle(bytes(msg_data), addr)
+            if resp:
+                # Send raw BER — no length prefix
+                conn.sendall(resp)
+
+            # Read next message's tag byte
+            first_byte = self._recv_exact(conn, 1)
+            if not first_byte:
+                return
 
     @staticmethod
     def _recv_exact(conn, n):

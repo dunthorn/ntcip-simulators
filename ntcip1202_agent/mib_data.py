@@ -8,7 +8,7 @@ Derived from NTCIP 1202 v04. Copyright by AASHTO / ITE / NEMA. Used by permissio
 import time
 import struct
 
-from standard_mibs import SystemMIB, InterfacesMIB, SnmpMIB, NTCIP1201MIB
+from common.standard_mibs import SystemMIB, InterfacesMIB, SnmpMIB, NTCIP1201MIB
 
 
 class ASCDataStore:
