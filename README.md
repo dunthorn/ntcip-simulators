@@ -2,12 +2,13 @@
 
 A Python SNMP agent suite implementing:
 - **NTCIP 1202 v4.11b** — Actuated Signal Controller (ASC)
+- **NTCIP 1203 v03**    — Dynamic Message Sign (DMS)
 - **NTCIP 1207 v02**    — Ramp Meter Control (RMC)
 - **NTCIP 1218 v01**    — Roadside Unit (RSU)
 
 No third-party dependencies — Python 3.7+ standard library only.
 
-Derived from NTCIP 1202 v04, NTCIP 1207 v02, and NTCIP 1218 v01.
+Derived from NTCIP 1202 v04, NTCIP 1203 v03, NTCIP 1207 v02, and NTCIP 1218 v01.
 Copyright by AASHTO / ITE / NEMA. Used by permission.
 
 ---
@@ -24,6 +25,12 @@ simulation/
 │   ├── agent.py              Entry point
 │   ├── mib_data.py           ASCDataStore — all 1202 MIB state
 │   ├── oid_tree.py           NativeOIDTree — 2,759 OIDs
+│   └── README.md
+│
+├── ntcip1203_agent/          DMS simulator (NTCIP 1203 v03)
+│   ├── dms_agent.py          Entry point
+│   ├── dms_mib_data.py       DMSDataStore — all 1203 MIB state
+│   ├── dms_oid_tree.py       DMSOIDTree — 1,096+ OIDs
 │   └── README.md
 │
 ├── ntcip1207_agent/          RMC simulator (NTCIP 1207 v02)
@@ -73,6 +80,9 @@ python3 -m ntcip1218_agent.rsu_agent --port 1162 --asc-port 1161
 
 # Terminal 3
 python3 -m ntcip1207_agent.rmc_agent --port 1163
+
+# Terminal 4
+python3 -m ntcip1203_agent.dms_agent --port 1164
 ```
 
 ---
@@ -119,6 +129,21 @@ python3 -m ntcip1207_agent.rmc_agent --port 1163
 | `--metering-plans` | `4` | Metering plans (1–16) |
 | `--verbose` | off | Debug logging |
 
+### DMS agent (`ntcip1203_agent.dms_agent`)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--host` | `0.0.0.0` | Bind address |
+| `--port` | `1164` | UDP/TCP port |
+| `--community` | `public` | Read-only community |
+| `--write-community` | `private` | Read-write community |
+| `--transport` | `udp` | `udp`, `tcp`, or `both` |
+| `--sign-width-px` | `96` | Sign width in pixels |
+| `--sign-height-px` | `32` | Sign height in pixels |
+| `--changeable` | `10` | Changeable message slots |
+| `--volatile` | `5` | Volatile message slots |
+| `--verbose` | off | Debug logging |
+
 ---
 
 ## OID Roots
@@ -130,6 +155,7 @@ python3 -m ntcip1207_agent.rmc_agent --port 1163
 | RFC 1213 snmp | `1.3.6.1.2.1.11` |
 | NTCIP 1201 global | `1.3.6.1.4.1.1206.4.2.6` |
 | NTCIP 1202 ASC | `1.3.6.1.4.1.1206.4.2.1` |
+| NTCIP 1203 DMS | `1.3.6.1.4.1.1206.4.2.3` |
 | NTCIP 1207 RMC | `1.3.6.1.4.1.1206.4.2.5` |
 | NTCIP 1218 RSU | `1.3.6.1.4.1.1206.4.2.18` |
 
@@ -138,21 +164,19 @@ python3 -m ntcip1207_agent.rmc_agent --port 1163
 ## System Architecture
 
 ```
-  ┌─────────────────────────────┐
-  │   Traffic Management System │
-  │   / Network Management      │
-  └──────┬──────────┬───────────┘
-         │          │               SNMP (1201+1202)
-         │ SNMP     │ SNMP     ┌────────────────────┐
-         │ (1201+   │ (1201+   │                    │
-         │  1218)   │  1207)   │   ASC sim          │
-  ┌──────┴──────┐  ┌┴──────────┴┐  │  (NTCIP 1202)  │
-  │  RSU sim    │  │  RMC sim   │  │                │
-  │ (NTCIP 1218)│  │ (NTCIP1207)│  └────────────────┘
-  └──────┬──────┘  └────────────┘
-         │ V2X broadcast
-         ▼
-    [OBUs / CV devices]
+  ┌──────────────────────────────────────┐
+  │   Traffic Management System          │
+  │   / Network Management               │
+  └───┬──────────┬──────────┬────────────┘
+      │ SNMP     │ SNMP     │ SNMP      SNMP (1201+1202)
+      │ (1218)   │ (1207)   │ (1203)  ┌────────────────┐
+  ┌───┴──────┐ ┌─┴───────┐ ┌┴──────┐  │  ASC sim       │
+  │ RSU sim  │ │ RMC sim │ │DMS sim│  │  (NTCIP 1202)  │
+  │ (1218)   │ │ (1207)  │ │(1203) │  └────────────────┘
+  └───┬──────┘ └─────────┘ └───────┘
+      │ V2X broadcast
+      ▼
+  [OBUs / CV devices]
 ```
 
 ---
