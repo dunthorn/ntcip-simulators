@@ -202,19 +202,17 @@ class SnmpMIB:
 # NTCIP 1201 Global Object Definitions  —  1.3.6.1.4.1.1206.4.2.6
 # ---------------------------------------------------------------------------
 #
-# NTCIP 1201 defines a standard device inventory layer.  The key objects are:
-#
-#   globalMaxModules        — number of rows in globalModuleTable
-#   globalModuleTable       — one row per "module" (subsystem) in the device
-#     globalModuleNumber    — index
-#     globalModuleDeviceNode — OID of the module's MIB root
-#     globalModuleVersion   — version string (DisplayString)
-#     globalModuleType      — enumeration
-#     globalModuleMinorVersion — integer
+# NTCIP 1201 v03 globalModuleTable columns (confirmed by PRL):
+#   2.2.3.1  moduleNumber      INTEGER
+#   2.2.3.2  moduleDeviceNode  OBJECT IDENTIFIER
+#   2.2.3.3  moduleMake        DisplayString
+#   2.2.3.4  moduleModel       DisplayString
+#   2.2.3.5  moduleVersion     DisplayString   <-- col 5, OCTET STRING
+#   2.2.3.6  moduleType        INTEGER (1=ntcip 2=national 3=private)
 #
 # We register two modules:
 #   1 — NTCIP 1201 itself  (global device definitions)
-#   2 — NTCIP 1202 v4      (ASC)
+#   2 — The device-specific MIB (1202/1203/1207/1218 depending on agent)
 # ---------------------------------------------------------------------------
 
 class NTCIP1201MIB:
@@ -223,7 +221,6 @@ class NTCIP1201MIB:
     Enough to satisfy manager "device inventory" queries.
     """
 
-    # Module type enumerations (NTCIP 1201 Table)
     MOD_TYPE_NTCIP     = 1
     MOD_TYPE_NATIONAL  = 2
     MOD_TYPE_PRIVATE   = 3
@@ -231,31 +228,26 @@ class NTCIP1201MIB:
     def __init__(self):
         self.globalMaxModules = 2
 
-        # globalModuleTable rows: (moduleNumber) -> dict
         self.module_table = {
             1: {
-                'globalModuleNumber':      1,
-                # globalModuleDeviceNode: OID pointing to NTCIP 1201 node
-                # 1.3.6.1.4.1.1206.4.2.6
-                'globalModuleDeviceNode':  (1, 3, 6, 1, 4, 1, 1206, 4, 2, 6),
-                'globalModuleVersion':     b'01.00',
-                'globalModuleType':        self.MOD_TYPE_NTCIP,
-                'globalModuleMinorVersion': 0,
+                'moduleNumber':     1,
+                'moduleDeviceNode': (1, 3, 6, 1, 4, 1, 1206, 4, 2, 6),
+                'moduleMake':       b'AASHTO/ITE/NEMA',
+                'moduleModel':      b'NTCIP 1201',
+                'moduleVersion':    b'03.00',
+                'moduleType':       self.MOD_TYPE_NTCIP,
             },
             2: {
-                'globalModuleNumber':      2,
-                # NTCIP 1202 ASC node: 1.3.6.1.4.1.1206.4.2.1
-                'globalModuleDeviceNode':  (1, 3, 6, 1, 4, 1, 1206, 4, 2, 1),
-                'globalModuleVersion':     b'04.11',
-                'globalModuleType':        self.MOD_TYPE_NTCIP,
-                'globalModuleMinorVersion': 11,
+                'moduleNumber':     2,
+                'moduleDeviceNode': (1, 3, 6, 1, 4, 1, 1206, 4, 2, 1),  # default ASC; overridden per agent
+                'moduleMake':       b'Simulator',
+                'moduleModel':      b'NTCIP 1202',
+                'moduleVersion':    b'04.11',
+                'moduleType':       self.MOD_TYPE_NTCIP,
             },
         }
 
-        # globalDescriptor (optional, but commonly queried)
-        self.globalDescriptor = b'NTCIP 1202 v4 ASC Simulator'
-
-        # globalModuleMax for individual modules
+        self.globalDescriptor   = b'NTCIP Device Simulator'
         self.globalSetIDParameter = 0
-        self.globalLocalID        = b'\x00' * 4    # 4-byte local device ID
+        self.globalLocalID        = b'\x00' * 4
         self.globalSystemAccess   = 4              # readWrite(4)

@@ -1,9 +1,9 @@
 """
-dms_mib_data.py  —  NTCIP 1203 v03 DMS MIB Data Store
+dms_mib_data.py  —  NTCIP 1203 v02 DMS MIB Data Store
 
-Derived from NTCIP 1203 v03. Copyright by AASHTO / ITE / NEMA. Used by permission.
+Derived from NTCIP 1203 v02. Copyright by AASHTO / ITE / NEMA. Used by permission.
 
-Covers all MIB sections defined in Section 5 of NTCIP 1203 v03.05:
+Covers all MIB sections defined in Section 5 of NTCIP 1203 v02.35:
   5.2  Sign Configuration and Capability Objects
   5.3  VMS Configuration Objects
   5.4  Font Definition Objects
@@ -38,7 +38,7 @@ MSG_MEM_BLANK       = 6   # blank (no message)
 
 class DMSDataStore:
     """
-    Central in-memory state for all NTCIP 1203 v03 DMS MIB objects.
+    Central in-memory state for all NTCIP 1203 v02 DMS MIB objects.
     Values are Python native types (int, bytes).
     The DMSOIDTree translates them to wire format on the way out.
 
@@ -66,6 +66,7 @@ class DMSDataStore:
         self._init_sign_control()
         self._init_illumination()
         self._init_scheduling()
+        self._build_schedule_messages()   # populate schedule msg table from action table
         self._init_sign_status()
         self._init_graphic_group()
 
@@ -96,8 +97,8 @@ class DMSDataStore:
                                     bit3=fiberOptic bit4=shuttered bit5=lamp
         """
         self.sign_config = {
-            'dmsSignAccess':       3,                    # pullOut(3)
-            'dmsSignType':         4,                    # vms(4)
+            'dmsSignAccess':       0b00000110,           # bit1=walkIn + bit2=rear
+            'dmsSignType':         6,                    # vmsFull(6) — full matrix LED sign
             'dmsSignHeight':       914,                  # 914 mm ≈ 36"
             'dmsSignWidth':        2438,                 # 2438 mm ≈ 96"
             'dmsHorizontalBorder': 25,                   # 25 mm
@@ -373,8 +374,57 @@ class DMSDataStore:
         # Validate message error (from last validate attempt)
         self.validate_msg_error = 0   # 0=none
 
+        # Schedule messages (memType=5): one row per action table entry.
+        # These are read-only snapshots of the messages the action table
+        # will activate.  The TMS reads them to know what will display.
+        # We populate them after _init_scheduling() is called, so they
+        # are built lazily on first access via _build_schedule_messages().
+        self.schedule_msg_table = {}
+
+        # Current message (memType=4): a single read-only row reflecting
+        # whatever is presently displayed on the sign.
+        self.current_msg_table = {
+            1: _msg(MSG_MEM_CURRENT, 1, b'', priority=0),
+        }
+
         # CRC helper for external use
         self._crc16 = _crc16
+
+    def _build_schedule_messages(self):
+        """
+        Build/refresh the schedule message table from the action table.
+        Called after scheduling is initialised, and whenever the action
+        table changes.  One row per action table entry; content mirrors
+        the referenced permanent/changeable message.
+        """
+        def _msg_for_code(msg_code: bytes):
+            """Resolve a 5-byte MessageIDCode to (multiString, crc)."""
+            if len(msg_code) < 3:
+                return b'', 0
+            mem_type = msg_code[0]
+            msg_num  = (msg_code[1] << 8) | msg_code[2]
+            if mem_type == MSG_MEM_PERMANENT and msg_num in self.permanent_msg_table:
+                row = self.permanent_msg_table[msg_num]
+                return row['dmsMessageMultiString'], row['dmsMessageCRC']
+            if mem_type == MSG_MEM_CHANGEABLE and msg_num in self.changeable_msg_table:
+                row = self.changeable_msg_table[msg_num]
+                return row['dmsMessageMultiString'], row['dmsMessageCRC']
+            return b'', 0
+
+        self.schedule_msg_table = {}
+        for idx, action in self.action_table.items():
+            multi, crc = _msg_for_code(action['dmsActionMsgCode'])
+            self.schedule_msg_table[idx] = {
+                'dmsMessageMemoryType':       MSG_MEM_SCHEDULE,
+                'dmsMessageNumber':           idx,
+                'dmsMessageMultiString':      multi,
+                'dmsMessageOwner':            b'SCHEDULE',
+                'dmsMessageCRC':              crc,
+                'dmsMessageBeacon':           0,
+                'dmsMessagePixelService':     0,
+                'dmsMessageRunTimePriority':  128,
+                'dmsMessageStatus':           4 if multi else 1,
+            }
 
     # =========================================================================
     # 5.7  Sign Control Objects  (dms.6)
@@ -524,6 +574,14 @@ class DMSDataStore:
         self.sign_control['dmsActivateMessageState'] = 2   # activated
         self.sign_control['dmsActivateMessage']      = activation_code
 
+        # Keep current_msg_table (memType=4) in sync
+        self.current_msg_table[1].update({
+            'dmsMessageMultiString':     self._active_multi,
+            'dmsMessageCRC':             crc,
+            'dmsMessageStatus':          4 if self._active_multi else 1,
+            'dmsMessageRunTimePriority': priority,
+        })
+
         if duration == 0 or duration == 0xFFFF:
             self._active_end_time = None
             self.sign_control['dmsMessageTimeRemaining'] = 65535
@@ -651,79 +709,94 @@ class DMSDataStore:
 
     def _init_sign_status(self):
         """
-        Core and error status.
+        Sign status objects.  OID layout: dms.9 = signStat node.
 
-        5.11.1  Core status:
-          dmsSignStatus      bitmask (2 bytes): visible operational faults
-          shortErrorStatus   bitmask (2 bytes): summarised fault flags
-          dmsStat (composite object, optional)
+        The internal sub-node structure follows the v01/v02 MIB grouping that
+        most deployed TMS systems expect, where dms.9.7 is the statError
+        sub-node (not a scalar).  This is the layout observed in the field:
 
-        5.11.2  Error status objects (pixel, lamp, humidity, etc.):
-          dmsPixelFailureByteCount   count of pixel failure bytes
-          dmsPixelFailureMessageCount
-          dmsPixelFailureTable       per-pixel failure data
-          dmsStatCurrentErrors       error bitmask
-          dmsStatDoorOpen            True if maintenance door open
-          dmsHumidityPercent         integer 0..100
+          dms.9.1.0    dmsSignStatus        bitmask: visible operational faults
+          dms.9.2.1    multiFieldTable      MULTI field values (table)
+          dms.9.3.0    currentSpeed         km/h (from [f] speed field)
+          dms.9.4.0    currentSpeedLimit    km/h
+          dms.9.5.0    watchdogFailureCount Counter32
+          dms.9.6.0    dmsStatDoorOpen      0=closed 1=open
 
-        5.11.3  Power status:
-          dmsPowerNumRows            number of power supply rows
-          dmsPowerTable:
-            dmsPowerIndex
-            dmsPowerType             1=primary 2=secondary 3=battery
-            dmsPowerVoltage          millivolts
-            dmsPowerStatus           1=ok 2=noVoltage 3=lowVoltage 4=highVoltage
+          dms.9.7      statError sub-node
+            dms.9.7.1.0  shortErrorStatus       bitmask (2 bytes)
+            dms.9.7.2.0  numPixelFailureRows     INTEGER
+            dms.9.7.3.1  pixelFailureTable       TABLE
+            dms.9.7.4.0  pixelTestActivation     0=noTest 1=test
+            dms.9.7.5.0  stuckOnLampFailure      bitmask
+            dms.9.7.6.0  stuckOffLampFailure     bitmask
+            dms.9.7.7.0  lampTestActivation      0=noTest 1=test
+            dms.9.7.8.0  fanFailure              bitmask
+            dms.9.7.9.0  fanTestActivation       0=noTest 1=test
+            dms.9.7.10.0 controllerErrorStatus   bitmask
 
-        5.11.4  Temperature status:
-          dmsMinCabinetTemp         min cabinet temp since last reset (°C)
-          dmsMaxCabinetTemp         max cabinet temp since last reset (°C)
-          dmsMinAmbientTemp
-          dmsMaxAmbientTemp
-          dmsMinSignHousingTemp
-          dmsMaxSignHousingTemp
+          dms.9.8      powerStatus sub-node
+            dms.9.8.1.0  signVolts              millivolts (AC supply)
+            dms.9.8.2.0  lowFuelThreshold       litres
+            dms.9.8.3.0  fuelLevel              litres
+            dms.9.8.4.0  engineRPM              rpm
+            dms.9.8.5.0  lineVolts              millivolts (line input)
+            dms.9.8.6.0  powerSource            1=ac 2=generator 3=solar 4=battery
+
+          dms.9.9      tempStatus sub-node
+            dms.9.9.1.0  minCabinetTemp         °C
+            dms.9.9.2.0  maxCabinetTemp         °C
+            dms.9.9.3.0  minAmbientTemp         °C
+            dms.9.9.4.0  maxAmbientTemp         °C
+            dms.9.9.5.0  minSignHousingTemp     °C
+            dms.9.9.6.0  maxSignHousingTemp     °C
         """
-        self.status = {
-            # Core
-            'dmsSignStatus':              0,      # 0 = no faults
-            'shortErrorStatus':           0,
-            # Pixel errors
-            'dmsPixelFailureByteCount':   0,
-            'dmsPixelFailureMessageCount': 0,
-            # Environmental
-            'dmsStatDoorOpen':            0,      # 0 = closed
-            'dmsHumidityPercent':         45,     # 45 % RH
-            # Misc errors
-            'dmsStatCurrentErrors':       0,
+        # Core status  (dms.9.1.0)
+        self.dms_sign_status = 0    # 0 = no faults (bitmask)
+
+        # MULTI field table  (dms.9.2.1.<col>.<row>)
+        self.num_multi_field_rows = 0
+        self.multi_field_table    = {}   # empty in simulation
+
+        # Speed info  (dms.9.3.0, .9.4.0)
+        self.current_speed       = 0
+        self.current_speed_limit = 0
+
+        # Watchdog / door  (dms.9.5.0, .9.6.0)
+        self.watchdog_failure_count = 0
+        self.stat_door_open         = 0   # 0=closed
+
+        # statError sub-node  (dms.9.7.x)
+        self.stat_error = {
+            'shortErrorStatus':       0,   # .9.7.1.0
+            'numPixelFailureRows':     0,   # .9.7.2.0
+            'pixelTestActivation':     0,   # .9.7.4.0  0=noTest
+            'stuckOnLampFailure':      0,   # .9.7.5.0
+            'stuckOffLampFailure':     0,   # .9.7.6.0
+            'lampTestActivation':      0,   # .9.7.7.0
+            'fanFailure':              0,   # .9.7.8.0
+            'fanTestActivation':       0,   # .9.7.9.0
+            'controllerErrorStatus':   0,   # .9.7.10.0
+        }
+        self.pixel_failure_table = {}   # (.9.7.3.1.<col>.<row>) — empty
+
+        # powerStatus sub-node  (dms.9.8.x)
+        self.power_status = {
+            'signVolts':        120000,  # 120 V in mV  .9.8.1.0
+            'lowFuelThreshold': 10,      # litres        .9.8.2.0
+            'fuelLevel':        0,       #               .9.8.3.0
+            'engineRPM':        0,       #               .9.8.4.0
+            'lineVolts':        120000,  # 120 V in mV  .9.8.5.0
+            'powerSource':      1,       # ac(1)         .9.8.6.0
         }
 
-        # Power supply table
-        self.power_num_rows = 2
-        self.power_table = {
-            1: {
-                'dmsPowerIndex':  1,
-                'dmsPowerType':   1,       # primary
-                'dmsPowerVoltage': 120000, # 120 V × 1000 = 120,000 mV
-                'dmsPowerStatus': 1,       # ok
-            },
-            2: {
-                'dmsPowerIndex':  2,
-                'dmsPowerType':   3,       # battery
-                'dmsPowerVoltage': 12600,  # 12.6 V
-                'dmsPowerStatus': 1,       # ok
-            },
-        }
-
-        # Pixel failure table (empty — no failures in simulation)
-        self.pixel_failure_table = {}
-
-        # Temperature status (°C)
+        # tempStatus sub-node  (dms.9.9.x)
         self.temp_status = {
-            'dmsMinCabinetTemp':      15,
-            'dmsMaxCabinetTemp':      42,
-            'dmsMinAmbientTemp':      10,
-            'dmsMaxAmbientTemp':      38,
-            'dmsMinSignHousingTemp':  12,
-            'dmsMaxSignHousingTemp':  55,
+            'minCabinetTemp':     15,   # .9.9.1.0
+            'maxCabinetTemp':     42,   # .9.9.2.0
+            'minAmbientTemp':     10,   # .9.9.3.0
+            'maxAmbientTemp':     38,   # .9.9.4.0
+            'minSignHousingTemp': 12,   # .9.9.5.0
+            'maxSignHousingTemp': 55,   # .9.9.6.0
         }
 
         self._last_status_tick = time.time()
@@ -732,18 +805,13 @@ class DMSDataStore:
         """Gently vary simulated temperature readings."""
         import math
         t  = time.time()
-        dt = t - self._last_status_tick
         self._last_status_tick = t
-        # Cabinet temp follows a slow sinusoidal drift
         base = 28 + 14 * math.sin(t / 3600)
-        self.temp_status['dmsMaxCabinetTemp'] = int(base)
-        self.temp_status['dmsMinCabinetTemp'] = int(base - 13)
+        self.temp_status['maxCabinetTemp'] = int(base)
+        self.temp_status['minCabinetTemp'] = int(base - 13)
         ambient = 22 + 10 * math.sin(t / 7200)
-        self.temp_status['dmsMaxAmbientTemp'] = int(ambient)
-        self.temp_status['dmsMinAmbientTemp'] = int(ambient - 12)
-        # Humidity slight variation
-        rh = 45 + 10 * math.sin(t / 5400)
-        self.status['dmsHumidityPercent'] = int(rh)
+        self.temp_status['maxAmbientTemp'] = int(ambient)
+        self.temp_status['minAmbientTemp'] = int(ambient - 12)
 
     # =========================================================================
     # 5.12  Graphic Definition Objects  (dms.10)
@@ -811,14 +879,18 @@ class DMSDataStore:
 
         self.graphic_table = {
             1: {
-                'dmsGraphicIndex':   1,
-                'dmsGraphicNumber':  1,
-                'dmsGraphicName':    b'Arrow16x16',
-                'dmsGraphicHeight':  16,
-                'dmsGraphicWidth':   16,
-                'dmsGraphicType':    1,            # mono8bit
-                'dmsGraphicID':      _crc16(_arrow_bmp),
-                'dmsGraphicStatus':  4,            # readyForUse
+                'dmsGraphicIndex':               1,
+                'dmsGraphicNumber':              1,
+                'dmsGraphicName':                b'Arrow16x16',
+                'dmsGraphicHeight':              16,
+                'dmsGraphicWidth':               16,
+                'dmsGraphicType':                1,              # mono8bit
+                'dmsGraphicID':                  _crc16(_arrow_bmp),
+                'dmsGraphicStatus':              4,              # readyForUse
+                # col 9: OCTET STRING (3 bytes RGB) — black by default
+                'dmsGraphicTransparentColor':    bytes([0, 0, 0]),
+                # col 10: INTEGER {disabled(1), enabled(2)}
+                'dmsGraphicTransparentEnabled':  1,              # disabled
             },
         }
 

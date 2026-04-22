@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-NTCIP 1203 v03 DMS SNMP Agent
+NTCIP 1203 v02 DMS SNMP Agent
 Implements the Dynamic Message Sign MIB.
 
-Derived from NTCIP 1203 v03. Copyright by AASHTO / ITE / NEMA. Used by permission.
+Derived from NTCIP 1203 v02. Copyright by AASHTO / ITE / NEMA. Used by permission.
 
 Usage (from the repository root):
     python3 -m ntcip1203_agent.dms_agent [options]
@@ -127,7 +127,7 @@ def _build_std_tree(snmp_mib):
         store         = _StdStore()
         store.system  = SystemMIB(hostname=None)
         store.system.sysDescr    = (
-            b'NTCIP 1203 v03 Dynamic Message Sign Simulator; Python SNMP Agent'
+            b'NTCIP 1203 v02 Dynamic Message Sign Simulator; Python SNMP Agent'
         )
         store.system.sysObjectID = (1, 3, 6, 1, 4, 1, 1206, 4, 2, 3)
         store.system.sysServices = 6
@@ -137,11 +137,12 @@ def _build_std_tree(snmp_mib):
         store.snmp_mib   = snmp_mib
         store.ntcip1201  = NTCIP1201MIB()
         store.ntcip1201.module_table[2] = {
-            'globalModuleNumber':       2,
-            'globalModuleDeviceNode':   (1, 3, 6, 1, 4, 1, 1206, 4, 2, 3),
-            'globalModuleVersion':      b'03.00',
-            'globalModuleType':         1,   # NTCIP
-            'globalModuleMinorVersion': 5,
+            'moduleNumber':     2,
+            'moduleDeviceNode': (1, 3, 6, 1, 4, 1, 1206, 4, 2, 3),
+            'moduleMake':       b'Simulator',
+            'moduleModel':      b'NTCIP 1203',
+            'moduleVersion':    b'02.35',
+            'moduleType':       1,   # NTCIP
         }
 
         tree = object.__new__(NativeOIDTree)
@@ -198,7 +199,7 @@ class SimulationThread(threading.Thread):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description='NTCIP 1203 v03 DMS SNMP Agent')
+    parser = argparse.ArgumentParser(description='NTCIP 1203 v02 DMS SNMP Agent')
     parser.add_argument('--host',             default='0.0.0.0')
     parser.add_argument('--port',             type=int, default=1164)
     parser.add_argument('--community',        default='public')
@@ -215,6 +216,10 @@ def main():
                         help='Number of changeable message slots (default: 10)')
     parser.add_argument('--volatile',         type=int, default=5,
                         help='Number of volatile message slots (default: 5)')
+    parser.add_argument('--config-port',      type=int, default=0, dest='config_port',
+                        help='Port for the web config UI (default: 0 = disabled)')
+    parser.add_argument('--config-file',      default=None, dest='config_file',
+                        help='JSON file to load/save DMS configuration (e.g. dms.json)')
     parser.add_argument('--verbose',          action='store_true')
     args = parser.parse_args()
 
@@ -222,13 +227,17 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     log.info("=" * 60)
-    log.info("NTCIP 1203 v03 DMS SNMP Agent")
+    log.info("NTCIP 1203 v02 DMS SNMP Agent")
     log.info(f"  Address:         {args.host}:{args.port}/{args.transport}")
     log.info(f"  Read community:  {args.community}")
     log.info(f"  Write community: {args.write_community}")
     log.info(f"  Sign size:       {args.sign_width_px}×{args.sign_height_px} px")
     log.info(f"  Changeable msgs: {args.changeable}")
     log.info(f"  Volatile msgs:   {args.volatile}")
+    if args.config_port:
+        log.info(f"  Config UI:       http://0.0.0.0:{args.config_port}/")
+    if args.config_file:
+        log.info(f"  Config file:     {args.config_file}")
     log.info(f"  OID root:        1.3.6.1.4.1.1206.4.2.3")
     log.info("=" * 60)
 
@@ -252,6 +261,26 @@ def main():
     # Log active message info
     log.info(f"  Active message:  (blank — awaiting activation)")
 
+    # Load saved config at startup if specified (even without the UI)
+    if args.config_file and not args.config_port:
+        from ntcip1203_agent.config_server import _apply_config_dict
+        import json, os
+        if os.path.exists(args.config_file):
+            try:
+                with open(args.config_file) as f:
+                    _apply_config_dict(dms_store, json.load(f))
+                log.info(f"Loaded config from {args.config_file!r}")
+            except Exception as ex:
+                log.warning(f"Failed to load config: {ex}")
+
+    # Start config UI if requested
+    config_srv = None
+    if args.config_port:
+        from ntcip1203_agent.config_server import ConfigServer
+        config_srv = ConfigServer(dms_store, port=args.config_port,
+                                  config_file=args.config_file)
+        config_srv.start()
+
     # Start simulation thread
     sim = SimulationThread(dms_store)
     sim.start()
@@ -270,6 +299,8 @@ def main():
 
     def _shutdown(signum, frame):
         log.info("Shutting down...")
+        if config_srv:
+            config_srv.stop()
         sim.stop()
         server.stop()
 

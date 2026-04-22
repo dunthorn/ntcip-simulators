@@ -136,11 +136,12 @@ def _build_std_tree(snmp_mib):
         store.snmp_mib   = snmp_mib
         store.ntcip1201  = NTCIP1201MIB()
         store.ntcip1201.module_table[2] = {
-            'globalModuleNumber':       2,
-            'globalModuleDeviceNode':   (1, 3, 6, 1, 4, 1, 1206, 4, 2, 5),
-            'globalModuleVersion':      b'02.00',
-            'globalModuleType':         1,   # NTCIP
-            'globalModuleMinorVersion': 14,
+            'moduleNumber':     2,
+            'moduleDeviceNode': (1, 3, 6, 1, 4, 1, 1206, 4, 2, 5),
+            'moduleMake':       b'Simulator',
+            'moduleModel':      b'NTCIP 1207',
+            'moduleVersion':    b'02.14',
+            'moduleType':       1,   # NTCIP
         }
 
         tree = object.__new__(NativeOIDTree)

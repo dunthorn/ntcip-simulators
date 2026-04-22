@@ -1578,33 +1578,53 @@ NativeOIDTree._build_snmp_mib = _build_snmp_mib
 # ------------------------------------------------------------------
 # NTCIP 1201 global objects  —  1.3.6.1.4.1.1206.4.2.6
 # ------------------------------------------------------------------
+# The actual 1201 MIB layout uses a 'globalConfiguration' intermediate
+# node at { global 1 }, making all scalars and the module table live
+# one level deeper than you'd expect:
+#
+#   global           { 1206.4.2.6 }
+#     globalConfiguration { global 1 }        <-- intermediate node
+#       globalSetIDParameter  { ...cfg 1 0 }  --> .6.1.1.0
+#       globalMaxModules      { ...cfg 2 0 }  --> .6.1.2.0
+#       globalModuleTable     { ...cfg 3 }    --> TABLE at .6.1.3
+#         globalModuleEntry   { table  1 }    --> .6.1.3.1
+#           globalModuleNumber        col 1   --> .6.1.3.1.1.<row>
+#           globalModuleDeviceNode    col 2   --> .6.1.3.1.2.<row>
+#           globalModuleVersion       col 3   --> .6.1.3.1.3.<row>
+#           globalModuleType          col 4   --> .6.1.3.1.4.<row>
+#           globalModuleMinorVersion  col 5   --> .6.1.3.1.5.<row>
+#       globalLocalID         { ...cfg 4 0 }  --> .6.1.4.0
+#       globalSystemAccess    { ...cfg 5 0 }  --> .6.1.5.0
+# ------------------------------------------------------------------
 def _build_ntcip1201_mib(self):
     s = self.store.ntcip1201
     N1201 = (1, 3, 6, 1, 4, 1, 1206, 4, 2, 6)
-    def o(*t): return N1201 + t
+    def o(*t): return N1201 + (1,) + t   # all objects are under the .1 sub-node
 
     self._ro_ro(o(1, 0), lambda: s.globalDescriptor)
     self._ri_rw(o(2, 0),
         lambda: s.globalSetIDParameter,
         lambda v: setattr(s, 'globalSetIDParameter', int(v)))
-    self._ri_ro(o(3, 0), lambda: s.globalMaxModules)
+    self._ri_ro(o(2, 1), lambda: s.globalMaxModules)  # also expose at .6.1.2.1 for compat
 
     for row, mod in s.module_table.items():
-        self._ri_ro(o(4, 1, 1, row),
-            lambda r=row: s.module_table[r]['globalModuleNumber'])
-        self._reg(o(4, 1, 2, row),
-            lambda r=row: ('oid', s.module_table[r]['globalModuleDeviceNode']))
-        self._ro_ro(o(4, 1, 3, row),
-            lambda r=row: s.module_table[r]['globalModuleVersion'])
-        self._ri_ro(o(4, 1, 4, row),
-            lambda r=row: s.module_table[r]['globalModuleType'])
-        self._ri_ro(o(4, 1, 5, row),
-            lambda r=row: s.module_table[r]['globalModuleMinorVersion'])
+        self._ri_ro(o(3, 1, 1, row),
+            lambda r=row: s.module_table[r]['moduleNumber'])
+        self._reg(o(3, 1, 2, row),
+            lambda r=row: ('oid', s.module_table[r]['moduleDeviceNode']))
+        self._ro_ro(o(3, 1, 3, row),
+            lambda r=row: s.module_table[r]['moduleMake'])
+        self._ro_ro(o(3, 1, 4, row),
+            lambda r=row: s.module_table[r]['moduleModel'])
+        self._ro_ro(o(3, 1, 5, row),
+            lambda r=row: s.module_table[r]['moduleVersion'])
+        self._ri_ro(o(3, 1, 6, row),
+            lambda r=row: s.module_table[r]['moduleType'])
 
-    self._ro_rw(o(5, 0),
+    self._ro_rw(o(4, 0),
         lambda: s.globalLocalID,
         lambda v: setattr(s, 'globalLocalID', bytes(v)))
-    self._ri_rw(o(6, 0),
+    self._ri_rw(o(5, 0),
         lambda: s.globalSystemAccess,
         lambda v: setattr(s, 'globalSystemAccess', int(v)))
 

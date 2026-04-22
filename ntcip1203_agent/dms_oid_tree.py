@@ -1,10 +1,10 @@
 """
-dms_oid_tree.py  —  NTCIP 1203 v03 DMS OID Tree
+dms_oid_tree.py  —  NTCIP 1203 v02 DMS OID Tree
 
 Maps every OID under dms (1.3.6.1.4.1.1206.4.2.3) to a getter/setter
 against the DMSDataStore.
 
-Derived from NTCIP 1203 v03. Copyright by AASHTO / ITE / NEMA. Used by permission.
+Derived from NTCIP 1203 v02. Copyright by AASHTO / ITE / NEMA. Used by permission.
 """
 
 import logging
@@ -20,7 +20,7 @@ def _oid(*tail):
 
 class DMSOIDTree:
     """
-    Sorted OID table for the NTCIP 1203 v03 DMS MIB.
+    Sorted OID table for the NTCIP 1203 v02 DMS MIB.
     get() / get_next() / set() interface matches NativeOIDTree from the ASC agent.
     """
 
@@ -218,49 +218,120 @@ class DMSOIDTree:
     # ==================================================================
 
     def _build_multi_config(self):
+        """
+        MULTI config objects use the v01 base numbering that all deployed
+        TMS systems expect, with v02 additions placed after position 10:
+
+          dms.4.1   defaultBackgroundColor
+          dms.4.2   defaultForegroundColor
+          dms.4.3   defaultFlashOn
+          dms.4.4   defaultFlashOff
+          dms.4.5   defaultFont
+          dms.4.6   defaultJustificationLine
+          dms.4.7   defaultJustificationPage
+          dms.4.8   defaultPageOnTime
+          dms.4.9   defaultPageOffTime
+          dms.4.10  defaultCharacterSet
+          dms.4.11  dmsColorScheme          (v02 addition, confirmed by published MIB)
+          dms.4.12  dmsSupportedMultiTags
+          dms.4.13  dmsMaxNumberPages
+          dms.4.14  dmsMaxMultiStringLength
+          dms.4.15  defaultBackgroundColorRGB    (v02 color24bit additions)
+          dms.4.16  defaultForegroundColorRGB
+          dms.4.17  defaultBackgroundColorRGBActivate
+          dms.4.18  defaultForegroundColorRGBActivate
+          dms.4.19  defaultFlashOnActivate   (v02 at-activation defaults)
+          dms.4.20  defaultFlashOffActivate
+          dms.4.21  defaultFontActivate
+          dms.4.22  defaultJustificationLineActivate
+          dms.4.23  defaultJustificationPageActivate
+          dms.4.24  defaultPageOnTimeActivate
+          dms.4.25  defaultPageOffTimeActivate
+        """
         s = self.store
         m = s.multi_cfg
 
-        pairs_ri_rw = [
-            (_oid(4, 1, 0),  'dmsDefaultBackgroundColor'),
-            (_oid(4, 2, 0),  'dmsDefaultForegroundColor'),
-            (_oid(4, 3, 0),  'dmsDefaultFlashOn'),
-            (_oid(4, 4, 0),  'dmsDefaultFlashOnActivate'),
-            (_oid(4, 5, 0),  'dmsDefaultFlashOff'),
-            (_oid(4, 6, 0),  'dmsDefaultFlashOffActivate'),
-            (_oid(4, 7, 0),  'dmsDefaultFont'),
-            (_oid(4, 8, 0),  'dmsDefaultFontActivate'),
-            (_oid(4, 9, 0),  'dmsDefaultJustificationLine'),
-            (_oid(4, 10, 0), 'dmsDefaultJustificationLineActivate'),
-            (_oid(4, 11, 0), 'dmsDefaultJustificationPage'),
-            (_oid(4, 12, 0), 'dmsDefaultJustificationPageActivate'),
-            (_oid(4, 13, 0), 'dmsDefaultPageOnTime'),
-            (_oid(4, 14, 0), 'dmsDefaultPageOnTimeActivate'),
-            (_oid(4, 15, 0), 'dmsDefaultPageOffTime'),
-            (_oid(4, 16, 0), 'dmsDefaultPageOffTimeActivate'),
-            (_oid(4, 20, 0), 'dmsDefaultCharacterSet'),
-            (_oid(4, 21, 0), 'dmsColorScheme'),
-            (_oid(4, 23, 0), 'dmsMaxNumberPages'),
-            (_oid(4, 24, 0), 'dmsMaxMultiStringLength'),
-        ]
-        for oid, key in pairs_ri_rw:
-            self._ri_rw(oid,
-                lambda k=key: m[k],
-                lambda v, k=key: m.__setitem__(k, v))
+        # v01 base objects (positions 1-10)
+        self._ri_rw(_oid(4, 1, 0),
+            lambda: m['dmsDefaultBackgroundColor'],
+            lambda v: m.__setitem__('dmsDefaultBackgroundColor', v))
+        self._ri_rw(_oid(4, 2, 0),
+            lambda: m['dmsDefaultForegroundColor'],
+            lambda v: m.__setitem__('dmsDefaultForegroundColor', v))
+        self._ri_rw(_oid(4, 3, 0),
+            lambda: m['dmsDefaultFlashOn'],
+            lambda v: m.__setitem__('dmsDefaultFlashOn', v))
+        self._ri_rw(_oid(4, 4, 0),
+            lambda: m['dmsDefaultFlashOff'],
+            lambda v: m.__setitem__('dmsDefaultFlashOff', v))
+        self._ri_rw(_oid(4, 5, 0),
+            lambda: m['dmsDefaultFont'],
+            lambda v: m.__setitem__('dmsDefaultFont', v))
+        self._ri_rw(_oid(4, 6, 0),
+            lambda: m['dmsDefaultJustificationLine'],
+            lambda v: m.__setitem__('dmsDefaultJustificationLine', v))
+        self._ri_rw(_oid(4, 7, 0),
+            lambda: m['dmsDefaultJustificationPage'],
+            lambda v: m.__setitem__('dmsDefaultJustificationPage', v))
+        self._ri_rw(_oid(4, 8, 0),
+            lambda: m['dmsDefaultPageOnTime'],
+            lambda v: m.__setitem__('dmsDefaultPageOnTime', v))
+        self._ri_rw(_oid(4, 9, 0),
+            lambda: m['dmsDefaultPageOffTime'],
+            lambda v: m.__setitem__('dmsDefaultPageOffTime', v))
+        self._ri_rw(_oid(4, 10, 0),
+            lambda: m['dmsDefaultCharacterSet'],
+            lambda v: m.__setitem__('dmsDefaultCharacterSet', v))
 
-        pairs_ro_rw = [
-            (_oid(4, 17, 0), 'dmsDefaultBackgroundColorRGB'),
-            (_oid(4, 18, 0), 'dmsDefaultBackgroundColorRGBActivate'),
-            (_oid(4, 19, 0), 'dmsDefaultForegroundColorRGB'),
-            (_oid(4, 19, 1), 'dmsDefaultForegroundColorRGBActivate'),
-        ]
-        for oid, key in pairs_ro_rw:
-            self._ro_rw(oid,
-                lambda k=key: m[k],
-                lambda v, k=key: m.__setitem__(k, v))
+        # v02 additions (positions 11-25)
+        self._ri_rw(_oid(4, 11, 0),
+            lambda: m['dmsColorScheme'],
+            lambda v: m.__setitem__('dmsColorScheme', v))
+        self._ro_ro(_oid(4, 12, 0),
+            lambda: m['dmsSupportedMultiTags'])
+        self._ri_rw(_oid(4, 13, 0),
+            lambda: m['dmsMaxNumberPages'],
+            lambda v: m.__setitem__('dmsMaxNumberPages', v))
+        self._ri_rw(_oid(4, 14, 0),
+            lambda: m['dmsMaxMultiStringLength'],
+            lambda v: m.__setitem__('dmsMaxMultiStringLength', v))
 
-        # dmsSupportedMultiTags (read-only bitmask)
-        self._ro_ro(_oid(4, 22, 0), lambda: m['dmsSupportedMultiTags'])
+        # RGB defaults (color24bit mode)
+        self._ro_rw(_oid(4, 15, 0),
+            lambda: m['dmsDefaultBackgroundColorRGB'],
+            lambda v: m.__setitem__('dmsDefaultBackgroundColorRGB', v))
+        self._ro_rw(_oid(4, 16, 0),
+            lambda: m['dmsDefaultForegroundColorRGB'],
+            lambda v: m.__setitem__('dmsDefaultForegroundColorRGB', v))
+        self._ro_rw(_oid(4, 17, 0),
+            lambda: m['dmsDefaultBackgroundColorRGBActivate'],
+            lambda v: m.__setitem__('dmsDefaultBackgroundColorRGBActivate', v))
+        self._ro_rw(_oid(4, 18, 0),
+            lambda: m['dmsDefaultForegroundColorRGBActivate'],
+            lambda v: m.__setitem__('dmsDefaultForegroundColorRGBActivate', v))
+
+        # At-activation defaults
+        self._ri_rw(_oid(4, 19, 0),
+            lambda: m['dmsDefaultFlashOnActivate'],
+            lambda v: m.__setitem__('dmsDefaultFlashOnActivate', v))
+        self._ri_rw(_oid(4, 20, 0),
+            lambda: m['dmsDefaultFlashOffActivate'],
+            lambda v: m.__setitem__('dmsDefaultFlashOffActivate', v))
+        self._ri_rw(_oid(4, 21, 0),
+            lambda: m['dmsDefaultFontActivate'],
+            lambda v: m.__setitem__('dmsDefaultFontActivate', v))
+        self._ri_rw(_oid(4, 22, 0),
+            lambda: m['dmsDefaultJustificationLineActivate'],
+            lambda v: m.__setitem__('dmsDefaultJustificationLineActivate', v))
+        self._ri_rw(_oid(4, 23, 0),
+            lambda: m['dmsDefaultJustificationPageActivate'],
+            lambda v: m.__setitem__('dmsDefaultJustificationPageActivate', v))
+        self._ri_rw(_oid(4, 24, 0),
+            lambda: m['dmsDefaultPageOnTimeActivate'],
+            lambda v: m.__setitem__('dmsDefaultPageOnTimeActivate', v))
+        self._ri_rw(_oid(4, 25, 0),
+            lambda: m['dmsDefaultPageOffTimeActivate'],
+            lambda v: m.__setitem__('dmsDefaultPageOffTimeActivate', v))
 
     # ==================================================================
     # 5.6  Message Objects  —  dms.5
@@ -273,10 +344,10 @@ class DMSOIDTree:
         self._ri_ro(_oid(5, 1, 0), lambda: s.num_permanent_messages)
         self._ri_ro(_oid(5, 2, 0), lambda: s.num_changeable_messages)
         self._ri_ro(_oid(5, 3, 0), lambda: s.max_changeable_messages)
-        self._gauge( _oid(5, 4, 0), lambda: s.changeable_free_bytes)
+        self._counter(_oid(5, 4, 0), lambda: s.changeable_free_bytes)
         self._ri_ro(_oid(5, 5, 0), lambda: s.num_volatile_messages)
         self._ri_ro(_oid(5, 6, 0), lambda: s.max_volatile_messages)
-        self._gauge( _oid(5, 7, 0), lambda: s.volatile_free_bytes)
+        self._counter(_oid(5, 7, 0), lambda: s.volatile_free_bytes)
 
         # Message table  dms.5.8.1.<col>.<memType>.<msgNum>
         # We flatten all three memory types into the same table OID branch,
@@ -317,7 +388,8 @@ class DMSOIDTree:
                 lambda r=row: r['dmsMessageStatus'])
 
         from ntcip1203_agent.dms_mib_data import (
-            MSG_MEM_PERMANENT, MSG_MEM_CHANGEABLE, MSG_MEM_VOLATILE)
+            MSG_MEM_PERMANENT, MSG_MEM_CHANGEABLE, MSG_MEM_VOLATILE,
+            MSG_MEM_SCHEDULE, MSG_MEM_CURRENT)
 
         for mn in s.permanent_msg_table:
             _reg_msg_row(MSG_MEM_PERMANENT, mn, s.permanent_msg_table)
@@ -325,6 +397,10 @@ class DMSOIDTree:
             _reg_msg_row(MSG_MEM_CHANGEABLE, mn, s.changeable_msg_table)
         for mn in s.volatile_msg_table:
             _reg_msg_row(MSG_MEM_VOLATILE, mn, s.volatile_msg_table)
+        for mn in s.schedule_msg_table:
+            _reg_msg_row(MSG_MEM_SCHEDULE, mn, s.schedule_msg_table)
+        for mn in s.current_msg_table:
+            _reg_msg_row(MSG_MEM_CURRENT, mn, s.current_msg_table)
 
         # Validate message error
         self._ri_ro(_oid(5, 9, 0), lambda: s.validate_msg_error)
@@ -418,13 +494,13 @@ class DMSOIDTree:
             lambda: il['dmsIllumControl'],
             lambda v: il.__setitem__('dmsIllumControl', v))
         self._ri_ro(_oid(7, 2, 0), lambda: il['dmsIllumMaxPhotocellLevel'])
-        self._gauge( _oid(7, 3, 0), lambda: il['dmsIllumPhotocellLevelStatus'])
+        self._ri_ro(_oid(7, 3, 0), lambda: il['dmsIllumPhotocellLevelStatus'])
         self._ri_ro(_oid(7, 4, 0), lambda: il['dmsIllumNumBrightLevels'])
         self._ri_ro(_oid(7, 5, 0), lambda: il['dmsIllumBrightLevelStatus'])
         self._ri_rw(_oid(7, 6, 0),
             lambda: il['dmsIllumManLevel'],
             lambda v: il.__setitem__('dmsIllumManLevel', v))
-        self._gauge( _oid(7, 8, 0), lambda: il['dmsIllumLightOutputStatus'])
+        self._ri_ro(_oid(7, 8, 0), lambda: il['dmsIllumLightOutputStatus'])
         self._ri_ro(_oid(7, 9, 0), lambda: il['dmsIllumBrightnessValuesError'])
 
         # Brightness values table  dms.7.7.1.<col>.<level>
@@ -472,37 +548,99 @@ class DMSOIDTree:
     # ==================================================================
 
     def _build_sign_status(self):
-        s = self.store
-        st = s.status
+        """
+        Sign status uses a sub-node structure matching the deployed v01/v02
+        MIB layout used by most TMS systems:
 
-        # 5.11.1 Core status
-        self._ri_ro(_oid(9, 1, 0), lambda: st['dmsSignStatus'])
-        self._ri_ro(_oid(9, 2, 0), lambda: st['shortErrorStatus'])
+          dms.9.1.0    dmsSignStatus        (core bitmask)
+          dms.9.2.1    multiFieldTable      (TABLE)
+          dms.9.3.0    currentSpeed
+          dms.9.4.0    currentSpeedLimit
+          dms.9.5.0    watchdogFailureCount
+          dms.9.6.0    dmsStatDoorOpen
 
-        # 5.11.2 Error objects
-        self._ri_ro(_oid(9, 3, 0),  lambda: st['dmsPixelFailureByteCount'])
-        self._ri_ro(_oid(9, 4, 0),  lambda: st['dmsPixelFailureMessageCount'])
-        # Pixel failure table omitted (empty in simulation)
-        self._ri_ro(_oid(9, 6, 0),  lambda: st['dmsStatCurrentErrors'])
-        self._ri_ro(_oid(9, 7, 0),  lambda: st['dmsStatDoorOpen'])
-        self._ri_ro(_oid(9, 8, 0),  lambda: st['dmsHumidityPercent'])
+          dms.9.7      statError sub-node
+            .9.7.1.0   shortErrorStatus
+            .9.7.2.0   numPixelFailureRows
+            .9.7.3.1   pixelFailureTable  (TABLE — empty in simulation)
+            .9.7.4.0   pixelTestActivation
+            .9.7.5.0   stuckOnLampFailure
+            .9.7.6.0   stuckOffLampFailure
+            .9.7.7.0   lampTestActivation
+            .9.7.8.0   fanFailure
+            .9.7.9.0   fanTestActivation
+            .9.7.10.0  controllerErrorStatus
 
-        # 5.11.3 Power status
-        self._ri_ro(_oid(9, 9, 0),  lambda: s.power_num_rows)
-        for row, pw in s.power_table.items():
-            self._ri_ro(_oid(9, 10, 1, 1, row), lambda r=pw: r['dmsPowerIndex'])
-            self._ri_ro(_oid(9, 10, 1, 2, row), lambda r=pw: r['dmsPowerType'])
-            self._gauge( _oid(9, 10, 1, 3, row), lambda r=pw: r['dmsPowerVoltage'])
-            self._ri_ro(_oid(9, 10, 1, 4, row), lambda r=pw: r['dmsPowerStatus'])
+          dms.9.8      powerStatus sub-node
+            .9.8.1.0   signVolts
+            .9.8.2.0   lowFuelThreshold
+            .9.8.3.0   fuelLevel
+            .9.8.4.0   engineRPM
+            .9.8.5.0   lineVolts
+            .9.8.6.0   powerSource
 
-        # 5.11.4 Temperature status
+          dms.9.9      tempStatus sub-node
+            .9.9.1.0   minCabinetTemp
+            .9.9.2.0   maxCabinetTemp
+            .9.9.3.0   minAmbientTemp
+            .9.9.4.0   maxAmbientTemp
+            .9.9.5.0   minSignHousingTemp
+            .9.9.6.0   maxSignHousingTemp
+        """
+        s  = self.store
+        se = s.stat_error
+        ps = s.power_status
         ts = s.temp_status
-        self._ri_ro(_oid(9, 11, 0), lambda: ts['dmsMinCabinetTemp'])
-        self._ri_ro(_oid(9, 12, 0), lambda: ts['dmsMaxCabinetTemp'])
-        self._ri_ro(_oid(9, 13, 0), lambda: ts['dmsMinAmbientTemp'])
-        self._ri_ro(_oid(9, 14, 0), lambda: ts['dmsMaxAmbientTemp'])
-        self._ri_ro(_oid(9, 15, 0), lambda: ts['dmsMinSignHousingTemp'])
-        self._ri_ro(_oid(9, 16, 0), lambda: ts['dmsMaxSignHousingTemp'])
+
+        # Core status  dms.9.1.0
+        self._ri_ro(_oid(9, 1, 0), lambda: s.dms_sign_status)
+
+        # MULTI field table  dms.9.2.1.<col>.<row>  (empty — just expose num rows)
+        self._ri_ro(_oid(9, 2, 0), lambda: s.num_multi_field_rows)
+
+        # Speed  dms.9.3.0, .9.4.0
+        self._ri_ro(_oid(9, 3, 0), lambda: s.current_speed)
+        self._ri_ro(_oid(9, 4, 0), lambda: s.current_speed_limit)
+
+        # Watchdog / door  dms.9.5.0, .9.6.0
+        self._counter(_oid(9, 5, 0), lambda: s.watchdog_failure_count)
+        self._ri_ro(  _oid(9, 6, 0), lambda: s.stat_door_open)
+
+        # statError sub-node  dms.9.7.x
+        self._ri_ro(_oid(9, 7, 1,  0), lambda: se['shortErrorStatus'])
+        self._ri_ro(_oid(9, 7, 2,  0), lambda: se['numPixelFailureRows'])
+        # Pixel failure table dms.9.7.3.1.<col>.<row> — no rows in simulation
+        self._ri_rw(_oid(9, 7, 4,  0),
+            lambda: se['pixelTestActivation'],
+            lambda v: se.__setitem__('pixelTestActivation', v))
+        self._ri_ro(_oid(9, 7, 5,  0), lambda: se['stuckOnLampFailure'])
+        self._ri_ro(_oid(9, 7, 6,  0), lambda: se['stuckOffLampFailure'])
+        self._ri_rw(_oid(9, 7, 7,  0),
+            lambda: se['lampTestActivation'],
+            lambda v: se.__setitem__('lampTestActivation', v))
+        self._ri_ro(_oid(9, 7, 8,  0), lambda: se['fanFailure'])
+        self._ri_rw(_oid(9, 7, 9,  0),
+            lambda: se['fanTestActivation'],
+            lambda v: se.__setitem__('fanTestActivation', v))
+        self._ri_ro(_oid(9, 7, 10, 0), lambda: se['controllerErrorStatus'])
+
+        # powerStatus sub-node  dms.9.8.x
+        self._ri_ro(_oid(9, 8, 1, 0), lambda: ps['signVolts'])
+        self._ri_rw( _oid(9, 8, 2, 0),
+            lambda: ps['lowFuelThreshold'],
+            lambda v: ps.__setitem__('lowFuelThreshold', v))
+        self._ri_ro(_oid(9, 8, 3, 0), lambda: ps['fuelLevel'])
+        self._ri_ro(_oid(9, 8, 4, 0), lambda: ps['engineRPM'])
+        self._ri_ro(_oid(9, 8, 5, 0), lambda: ps['lineVolts'])
+        self._ri_ro( _oid(9, 8, 6, 0), lambda: ps['powerSource'])
+
+        # tempStatus sub-node  dms.9.9.x
+        self._ri_ro(_oid(9, 9, 1, 0), lambda: ts['minCabinetTemp'])
+        self._ri_ro(_oid(9, 9, 2, 0), lambda: ts['maxCabinetTemp'])
+        self._ri_ro(_oid(9, 9, 3, 0), lambda: ts['minAmbientTemp'])
+        self._ri_ro(_oid(9, 9, 4, 0), lambda: ts['maxAmbientTemp'])
+        self._ri_ro(_oid(9, 9, 5, 0), lambda: ts['minSignHousingTemp'])
+        self._ri_ro(_oid(9, 9, 6, 0), lambda: ts['maxSignHousingTemp'])
 
     # ==================================================================
     # 5.12  Graphic Definition Objects  —  dms.10
@@ -514,7 +652,7 @@ class DMSOIDTree:
         self._ri_ro(_oid(10, 1, 0), lambda: s.max_graphics)
         self._ri_ro(_oid(10, 2, 0), lambda: s.num_graphics)
         self._ri_ro(_oid(10, 3, 0), lambda: s.max_graphic_size)
-        self._gauge( _oid(10, 4, 0), lambda: s.available_graphic_mem)
+        self._counter(_oid(10, 4, 0), lambda: s.available_graphic_mem)
         self._ri_ro(_oid(10, 5, 0), lambda: s.graphic_block_size)
 
         # Graphic table  dms.10.6.1.<col>.<graphicIndex>
@@ -533,6 +671,16 @@ class DMSOIDTree:
             self._ri_rw(_oid(10, 6, 1, 8, gi),
                 lambda r=row: r['dmsGraphicStatus'],
                 lambda v, r=row: r.__setitem__('dmsGraphicStatus', v))
+            # col 9: dmsGraphicTransparentColor — OCTET STRING (3-byte RGB)
+            self._ro_rw(_oid(10, 6, 1, 9, gi),
+                lambda r=row: bytes(r['dmsGraphicTransparentColor']),
+                lambda v, r=row: r.__setitem__(
+                    'dmsGraphicTransparentColor',
+                    bytes(v)[:3] if len(bytes(v)) >= 3 else bytes(v).ljust(3, b'\x00')))
+            # col 10: dmsGraphicTransparentEnabled — INTEGER {disabled(1), enabled(2)}
+            self._ri_rw(_oid(10, 6, 1, 10, gi),
+                lambda r=row: r['dmsGraphicTransparentEnabled'],
+                lambda v, r=row: r.__setitem__('dmsGraphicTransparentEnabled', v))
 
         # Graphic bitmap table  dms.10.7.1.<col>.<graphicIndex>.<blockIndex>
         for (gi, bi), row in s.graphic_bitmap_table.items():

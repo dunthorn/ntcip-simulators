@@ -144,11 +144,12 @@ def _build_std_tree(hostname, snmp_mib):
     store.ntcip1201  = NTCIP1201MIB()
     # Update 1201 module table to reflect RSU
     store.ntcip1201.module_table[2] = {
-        'globalModuleNumber':      2,
-        'globalModuleDeviceNode':  (1, 3, 6, 1, 4, 1, 1206, 4, 2, 18),
-        'globalModuleVersion':     b'01.00',
-        'globalModuleType':        1,   # NTCIP
-        'globalModuleMinorVersion': 38,
+        'moduleNumber':     2,
+        'moduleDeviceNode': (1, 3, 6, 1, 4, 1, 1206, 4, 2, 18),
+        'moduleMake':       b'Simulator',
+        'moduleModel':      b'NTCIP 1218',
+        'moduleVersion':    b'01.38',
+        'moduleType':       1,   # NTCIP
     }
 
     from ntcip1202_agent.oid_tree import NativeOIDTree
