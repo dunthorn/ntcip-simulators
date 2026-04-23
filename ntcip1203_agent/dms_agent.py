@@ -291,7 +291,8 @@ def main():
         host=args.host,
         port=args.port,
         ro_communities=[args.community.encode()],
-        rw_communities=[args.write_community.encode()],
+        rw_communities=[args.write_community.encode(),
+                        args.community.encode()],  # also accept read community for SETs
         snmp_mib=snmp_mib,
         transport=args.transport,
     )

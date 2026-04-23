@@ -493,7 +493,7 @@ class DMSDataStore:
             'dmsPowerLossMessage':                _blank_code,
             'dmsEndDurationMessage':              _blank_code,
             'dmsMemoryMgmt':                      0,
-            'dmsActivateMessageError':            0,     # 0=none
+            'dmsActivateMessageError':            1,     # 1=other; cleared to 0 on first successful activation
             'dmsMultiSyntaxError':                0,     # 0=other (no error)
             'dmsMultiSyntaxErrorPosition':        0,
             'dmsOtherMultiError':                 0,
