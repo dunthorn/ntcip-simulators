@@ -877,28 +877,53 @@ class DMSDataStore:
                     crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
             return crc & 0xFFFF
 
-        self.graphic_table = {
-            1: {
-                'dmsGraphicIndex':               1,
-                'dmsGraphicNumber':              1,
-                'dmsGraphicName':                b'Arrow16x16',
-                'dmsGraphicHeight':              16,
-                'dmsGraphicWidth':               16,
-                'dmsGraphicType':                1,              # mono8bit
-                'dmsGraphicID':                  _crc16(_arrow_bmp),
-                'dmsGraphicStatus':              4,              # readyForUse
-                # col 9: OCTET STRING (3 bytes RGB) — black by default
-                'dmsGraphicTransparentColor':    bytes([0, 0, 0]),
-                # col 10: INTEGER {disabled(1), enabled(2)}
-                'dmsGraphicTransparentEnabled':  1,              # disabled
-            },
-        }
+        self.graphic_table = {}
 
-        # Bitmap data (stored as one block per graphic for simplicity)
-        self.graphic_bitmap_table = {
-            (1, 1): {   # (graphicIndex, blockIndex)
-                'dmsGraphicBitmapIndex':  1,
+        # Pre-populate all max_graphics rows so the TMS never gets NoSuchName
+        # when it iterates up to dmsMaxNumberGraphics.  Empty slots are notUsed(1).
+        _empty_gfx = {
+            'dmsGraphicNumber':              0,
+            'dmsGraphicName':                b'',
+            'dmsGraphicHeight':              0,
+            'dmsGraphicWidth':               0,
+            'dmsGraphicType':                1,              # mono8bit
+            'dmsGraphicID':                  0,
+            'dmsGraphicStatus':              1,              # notUsed
+            'dmsGraphicTransparentColor':    bytes([0, 0, 0]),
+            'dmsGraphicTransparentEnabled':  1,              # disabled
+        }
+        for gi in range(1, self.max_graphics + 1):
+            self.graphic_table[gi] = dict(_empty_gfx, **{'dmsGraphicIndex': gi,
+                                                          'dmsGraphicNumber': gi})
+
+        # Overwrite row 1 with the pre-defined arrow graphic
+        self.graphic_table[1].update({
+            'dmsGraphicNumber':              1,
+            'dmsGraphicName':                b'Arrow16x16',
+            'dmsGraphicHeight':              16,
+            'dmsGraphicWidth':               16,
+            'dmsGraphicType':                1,              # mono8bit
+            'dmsGraphicID':                  _crc16(_arrow_bmp),
+            'dmsGraphicStatus':              4,              # readyForUse
+            'dmsGraphicTransparentColor':    bytes([0, 0, 0]),
+            'dmsGraphicTransparentEnabled':  1,              # disabled
+        })
+
+        self.num_graphics = 1   # only one actually defined
+
+        # Bitmap data — one placeholder block per graphic row so GETNEXT walks
+        # don't fall off the table for rows 2-8 (which are notUsed but readable).
+        self.graphic_bitmap_table = {}
+        for gi in range(1, self.max_graphics + 1):
+            self.graphic_bitmap_table[(gi, 1)] = {
+                'dmsGraphicBitmapIndex':  gi,
                 'dmsGraphicBlockIndex':   1,
-                'dmsGraphicBlockBitmap':  _arrow_bmp,
-            },
+                'dmsGraphicBlockBitmap':  bytes(0),    # empty for notUsed rows
+            }
+
+        # Row 1 has actual bitmap data
+        self.graphic_bitmap_table[(1, 1)] = {
+            'dmsGraphicBitmapIndex':  1,
+            'dmsGraphicBlockIndex':   1,
+            'dmsGraphicBlockBitmap':  _arrow_bmp,
         }

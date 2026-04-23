@@ -1457,6 +1457,7 @@ def _collect_config_dict(store):
                 'dmsGraphicTransparentColor':   row['dmsGraphicTransparentColor'].hex(),
             }
             for gi, row in s.graphic_table.items()
+            if row['dmsGraphicStatus'] != 1   # skip notUsed rows
         },
         'color': {
             'dmsColorScheme':              s.multi_cfg['dmsColorScheme'],
