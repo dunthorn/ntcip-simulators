@@ -422,8 +422,11 @@ class _Dispatcher:
     def _handle_set(self, msg):
         vb_enc = []; err_s = ERR_NONE; err_i = 0
         for i, (oid, val) in enumerate(msg.varbinds):
+            oid_str = '.'.join(str(x) for x in oid)
+            log.info(f"SET {oid_str} = {val!r:.60}")
             ok = self.oid_tree.set(oid, val)
             if not ok:
+                log.warning(f"SET {oid_str} -> no such OID")
                 if msg.version == 0:
                     err_s = ERR_NO_SUCH; err_i = i + 1
                     vb_enc = [_encode_no_such_object(o) for o, _ in msg.varbinds]
