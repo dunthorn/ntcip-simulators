@@ -508,7 +508,8 @@ class DMSDataStore:
         self._active_mem_type = MSG_MEM_BLANK
         self._active_msg_num  = 0
         self._active_multi    = b''
-        self._active_end_time = None   # None = continuous
+        self._active_end_time    = None   # None = continuous
+        self._last_activation_time = None  # for error-latch reset
 
     def activate_message(self, activation_code: bytes):
         """
@@ -588,6 +589,7 @@ class DMSDataStore:
         self.sign_control['dmsActivateMessageError'] = 0
         self.sign_control['dmsActivateMessageState'] = 2   # activated
         self.sign_control['dmsActivateMessage']      = activation_code
+        self._last_activation_time = time.time()   # for error-latch reset
 
         # Keep current_msg_table (memType=4) in sync
         self.current_msg_table[1].update({
@@ -607,7 +609,17 @@ class DMSDataStore:
         return True
 
     def tick_control(self):
-        """Called periodically — expire timed messages."""
+        """Called periodically — expire timed messages and reset error latch."""
+        # Reset dmsActivateMessageError back to 1 (other/sentinel) ~1.5s after
+        # a successful activation.  This ensures the TMS always sees a non-zero
+        # value BEFORE the next activation, producing a detectable 1→0 transition
+        # on success (or 1→6 on failure) regardless of prior state.
+        if (self._last_activation_time is not None
+                and self.sign_control['dmsActivateMessageError'] == 0
+                and time.time() - self._last_activation_time > 1.5):
+            self.sign_control['dmsActivateMessageError'] = 1   # other (settled)
+            self._last_activation_time = None
+
         if self._active_end_time is not None:
             remaining = max(0, int((self._active_end_time - time.time()) / 60))
             self.sign_control['dmsMessageTimeRemaining'] = remaining
