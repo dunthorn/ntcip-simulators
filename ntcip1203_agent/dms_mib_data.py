@@ -524,6 +524,11 @@ class DMSDataStore:
         msg_num    = (activation_code[4] << 8) | activation_code[5]
         msg_crc    = (activation_code[6] << 8) | activation_code[7]
 
+        import logging
+        log = logging.getLogger('dms_mib_data')
+        log.info(f"Activate: duration={duration} priority={priority} "
+                 f"memType={mem_type} msgNum={msg_num} crc=0x{msg_crc:04X}")
+
         # Locate the message
         if mem_type == MSG_MEM_BLANK:
             self._active_mem_type = MSG_MEM_BLANK
@@ -543,6 +548,7 @@ class DMSDataStore:
             if row['dmsMessageStatus'] != 4:   # must be valid
                 self.sign_control['dmsActivateMessageError'] = 6   # msgNotDefined
                 self.sign_control['dmsActivateMessageState'] = 1
+                log.warning(f"Changeable msg {msg_num} not valid (status={row['dmsMessageStatus']})")
                 return False
             self._active_mem_type = mem_type
             self._active_msg_num  = msg_num
@@ -552,11 +558,18 @@ class DMSDataStore:
             if row['dmsMessageStatus'] != 4:
                 self.sign_control['dmsActivateMessageError'] = 6
                 self.sign_control['dmsActivateMessageState'] = 1
+                log.warning(f"Volatile msg {msg_num} not valid (status={row['dmsMessageStatus']})")
                 return False
             self._active_mem_type = mem_type
             self._active_msg_num  = msg_num
             self._active_multi    = row['dmsMessageMultiString']
+        elif mem_type == MSG_MEM_CURRENT:
+            # Activating "current" message — re-display whatever is active now.
+            # This is a no-op if something is already displayed.
+            pass
         else:
+            log.warning(f"Activate failed: memType={mem_type} msgNum={msg_num} "
+                        f"not found. changeable keys={list(self.changeable_msg_table.keys())[:5]}")
             self.sign_control['dmsActivateMessageError'] = 6   # msgNotDefined
             self.sign_control['dmsActivateMessageState'] = 1
             return False
