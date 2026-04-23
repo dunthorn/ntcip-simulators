@@ -27,13 +27,15 @@ import socket
 # ---------------------------------------------------------------------------
 DMS_OID = (1, 3, 6, 1, 4, 1, 1206, 4, 2, 3)
 
-# Memory type constants (used in MessageIDCode / MessageActivationCode)
-MSG_MEM_PERMANENT   = 1   # factory-stored messages
-MSG_MEM_CHANGEABLE  = 2   # operator-stored messages (survives power cycle)
-MSG_MEM_VOLATILE    = 3   # temporary messages (cleared on power cycle)
-MSG_MEM_CURRENT     = 4   # pseudo-type: currently-displayed message
-MSG_MEM_SCHEDULE    = 5   # schedule-activated messages
-MSG_MEM_BLANK       = 6   # blank (no message)
+# Memory type constants — NTCIP 1203 v02 Section 5.6.8 MessageMemoryType
+# These are the wire values used in dmsMessageMemoryType and MessageActivationCode.
+MSG_MEM_OTHER       = 1   # other (not used directly)
+MSG_MEM_PERMANENT   = 2   # factory-stored messages
+MSG_MEM_CHANGEABLE  = 3   # operator-stored messages (survives power cycle)
+MSG_MEM_VOLATILE    = 4   # temporary messages (cleared on power cycle)
+MSG_MEM_CURRENT     = 5   # pseudo-type: currently-displayed message
+MSG_MEM_SCHEDULE    = 6   # schedule-activated messages
+MSG_MEM_BLANK       = 7   # blank (no message)
 
 
 class DMSDataStore:
